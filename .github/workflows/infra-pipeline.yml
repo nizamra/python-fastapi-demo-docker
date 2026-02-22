@@ -1,0 +1,67 @@
+name: Infrastructure (GKE & Registry)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:
+
+env:
+  TF_VERSION: "1.14.2"
+  GCP_REGION: "us-central1"
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infra/envs/dev
+        run: terraform init -backend-config="envs/dev/backend.tfvars"
+
+      - name: Terraform Apply
+        working-directory: infra/envs/dev
+        run: terraform apply -auto-approve -var-file="envs/dev/values.tfvars"
+
+
+  prod:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Initialize Terraform
+        run: terraform init -backend-config="envs/prod/backend.tfvars"
+
+      - name: Plan Terraform for Prod
+        run: terraform plan -var-file="envs/prod/values.tfvars"
+
+      - name: Manual Approval
+        uses: hmarr/auto-approve-action@v4
+
+      - name: Apply Terraform for Prod
+        run: terraform apply -auto-approve -var-file="envs/prod/values.tfvars"

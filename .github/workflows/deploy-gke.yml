@@ -1,30 +1,135 @@
-name: Deploy to GKE
+name: CD - Deploy to GKE
 
 on:
   workflow_dispatch:
+    inputs:
+      source_tag:
+        description: 'The Git SHA or Dev tag to promote (e.g. sha-a1b2c or dev)'
+        required: true
+        default: 'dev'
+      target_tag:
+        description: 'The new version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      environment:
+        description: 'Target Environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PROJECT_ID: "gcp-capstone-481414"
+  REGION: "us-central1"
+  REPO_NAME: "bookshelf-docker-repo"
+  IMAGE_NAME: "fastapi-app"
+  GKE_CLUSTER: "bookshelf-dev-cluster"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v1
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Configure kubectl
-        uses: google-github-actions/setup-gcloud@v1
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
         with:
-          export_default_credentials: true
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Set up GKE Cluster
+      - name: Install kubectl
         run: |
-          gcloud container clusters get-credentials CLUSTER_NAME --region REGION --project PROJECT_ID
+          gcloud components install kubectl
 
-      - name: Deploy to GKE
+      - name: Set Cluster Name for prod
+        id: set_cluster
+        shell: bash
         run: |
+          # Read the environment input (dev or prod)
+          ENV_INPUT="${{ github.event.inputs.environment }}"
+          
+          # Construct the name: bookshelf-dev-cluster or bookshelf-prod-cluster
+          CLUSTER_NAME="bookshelf-${ENV_INPUT}-cluster"
+          
+          # Export it to the GITHUB_ENV so subsequent steps can see it
+          echo "GKE_CLUSTER=${CLUSTER_NAME}" >> $GITHUB_ENV
+          
+          echo "Target Cluster set to: ${CLUSTER_NAME}"
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --region ${{ env.REGION }}
+
+      - name: Create Namespace
+        run: |
+          kubectl create namespace my-cool-app --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Ensure Secrets Exist
+        env:
+          SECRET_USER: ${{ secrets.DB_USERNAME }}
+          SECRET_PASS: ${{ secrets.DB_PASSWORD }}
+          SECRET_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          kubectl create secret generic fastapi-secret \
+            --from-literal=POSTGRES_USER=$SECRET_USER \
+            --from-literal=POSTGRES_PASSWORD=$SECRET_PASS \
+            --from-literal=POSTGRES_DB=$SECRET_NAME \
+            --namespace=my-cool-app --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Retag Image in Artifact Registry
+        env:
+          SOURCE_TAG: ${{ github.event.inputs.source_tag }}
+          TARGET_TAG: ${{ github.event.inputs.target_tag }}
+          IMAGE_URL: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}
+        run: |
+          echo "Promoting ${IMAGE_URL}:${SOURCE_TAG} to ${IMAGE_URL}:${TARGET_TAG}..."
+          gcloud artifacts docker tags add \
+            ${IMAGE_URL}:${SOURCE_TAG} \
+            ${IMAGE_URL}:${TARGET_TAG}
+
+      - name: Create DB Init ConfigMap
+        run: |
+          kubectl create configmap db-init-script \
+            --from-file=server/db/init.sh \
+            --namespace=my-cool-app --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Application
+        env:
+          TARGET_TAG: ${{ github.event.inputs.target_tag }}
+        run: |
+          # Use sed to replace the placeholder in the YAML with the actual version
+          sed -i "s|__IMAGE_TAG__|${TARGET_TAG}|g" kubernetes/fastapi-app.yaml
+          
+          # Apply both App and DB
+          kubectl apply -f kubernetes/postgres-db.yaml
           kubectl apply -f kubernetes/fastapi-app.yaml
+
+      - name: Inject Database Connection String
+        env:
+          DB_USER: ${{ secrets.DB_USERNAME }}
+          DB_PASS: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_HOST: "db"
+          DB_PORT: "5432"
+        run: |
+          DB_URL="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+          echo "Injecting DOCKER_DATABASE_URL into deployment..."
+          kubectl set env deployment/fastapi-deployment DOCKER_DATABASE_URL="${DB_URL}" -n my-cool-app
+
+      - name: Verify Deployment
+        run: |
+          kubectl rollout status deployment/fastapi-deployment -n my-cool-app

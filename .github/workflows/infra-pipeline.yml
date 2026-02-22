@@ -7,12 +7,16 @@ on:
       - 'infra/**'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   TF_VERSION: "1.14.2"
   GCP_REGION: "us-central1"
 
 jobs:
-  deploy-infra:
+  deploy-infra-dev:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
@@ -40,10 +44,10 @@ jobs:
         run: terraform apply -auto-approve -var-file="envs/dev/values.tfvars"
 
 
-  prod:
+  deploy-infra-prod:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: dev
+    needs: deploy-infra-dev
 
     steps:
       - name: Checkout code

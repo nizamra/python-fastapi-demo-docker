@@ -11,10 +11,5 @@ variable "region" {
 # Network variables
 variable "vpc_network_name" {
   description = "The name of the VPC network (usually 'default' for new projects)"
-  type       = string
-}
-
-variable "vpc_subnetwork_name" {
-  description = "The name of the subnetwork (usually 'default' for the region)"
-  type       = string
+  type        = string
 }

@@ -1,3 +1,3 @@
 project_id        = "gcp-passline"
 region            = "us-central1"
-state_bucket_name = "gcp-tf-state"
+vpc_network_name  = "default"

@@ -1,14 +1,14 @@
 variable "project_id" {
-  description = "The ID of the GCP project"
+  description = "GCP Project ID where bootstrap resources will live."
   type        = string
 }
 
 variable "region" {
-  description = "The region where resources will be created"
+  description = "Primary region for resources (e.g., us-central1)."
   type        = string
 }
 
-variable "bucket_name" {
-  description = "The name of the storage bucket"
+variable "state_bucket_name" {
+  description = "Name of the GCS bucket to create for Terraform state. Must be globally unique."
   type        = string
 }

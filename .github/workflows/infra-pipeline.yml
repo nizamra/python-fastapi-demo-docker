@@ -61,10 +61,10 @@ jobs:
         run: terraform init
 
       - name: Plan Terraform for Prod
-        run: terraform plan -var-file="envs/prod/values.tfvars"
+        run: terraform plan -var-file="values.tfvars"
 
       - name: Manual Approval
         uses: hmarr/auto-approve-action@v4
 
       - name: Apply Terraform for Prod
-        run: terraform apply -auto-approve -var-file="envs/prod/values.tfvars"
+        run: terraform apply -auto-approve -var-file="values.tfvars"

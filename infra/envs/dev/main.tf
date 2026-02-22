@@ -1,3 +1,7 @@
+locals {
+  module_root = "${path.root}/infra/modules"
+}
+
 # Set up the default VPC and Subnet dynamically, no hardcode IDs
 data "google_compute_network" "default" {
   name = var.vpc_network_name
@@ -9,7 +13,7 @@ data "google_compute_subnetwork" "default" {
 }
 
 module "artifact_registry" {
-  source = "../../../modules/artifact-registry"
+  source = "${local.module_root}/artifact-registry"
 
   project_id      = var.project_id
   region          = var.region
@@ -17,7 +21,7 @@ module "artifact_registry" {
 }
 
 module "gke_cluster" {
-  source = "../../../modules/gke-cluster"
+  source = "${local.module_root}/gke-cluster"
 
   project_id        = var.project_id
   region            = var.region

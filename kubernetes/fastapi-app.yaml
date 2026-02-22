@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: web
-        image: 01234567890.dkr.ecr.us-east-1.amazonaws.com/fastapi-microservices:1.0
+        image: us-central1-docker.pkg.dev/gcp-capstone-481414/bookshelf-docker-repo/fastapi-app:dev
         ports:
         - containerPort: 8000
         envFrom:
@@ -42,5 +42,3 @@ spec:
           limits:
             cpu: "500m"
             memory: "500Mi"
-      imagePullSecrets:
-      - name: regcred

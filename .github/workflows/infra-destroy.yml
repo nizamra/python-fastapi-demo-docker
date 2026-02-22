@@ -1,0 +1,69 @@
+name: Infrastructure Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select Environment to Destroy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.14.2"
+  GCP_REGION: "us-central1"
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Set Target Directory
+        id: set_dir
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+            echo "target_dir=infra/envs/dev" >> $GITHUB_OUTPUT
+            echo "var_file=values.tfvars" >> $GITHUB_OUTPUT
+          else
+            echo "target_dir=infra/envs/prod" >> $GITHUB_OUTPUT
+            echo "var_file=values.tfvars" >> $GITHUB_OUTPUT
+          fi
+
+      # - name: Manual Approval
+      #   if: github.event.inputs.environment == 'prod'
+      #   uses: trstringer/manual-approval@v1
+      #   with:
+      #     secret: ${{ secrets.GITHUB_TOKEN }}
+      #     approvers: nizamra
+      #     minimum-approvals: 1
+
+      - name: Terraform Init
+        working-directory: ${{ steps.set_dir.outputs.target_dir }}
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ${{ steps.set_dir.outputs.target_dir }}
+        run: |
+          terraform plan -destroy -var-file="${{ steps.set_dir.outputs.var_file }}"
+          terraform destroy -auto-approve -var-file="${{ steps.set_dir.outputs.var_file }}"

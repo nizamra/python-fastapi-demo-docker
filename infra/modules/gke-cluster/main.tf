@@ -3,7 +3,7 @@ resource "google_container_cluster" "primary" {
   location = var.region
   project  = var.project_id
 
-  enable_autopilot = true 
+  enable_autopilot = true
 
   # Network configuration
   network    = var.network_name
@@ -20,9 +20,7 @@ resource "google_container_cluster" "primary" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
-  # Remove default node pool
-  remove_default_node_pool = true
-  initial_node_count       = 1
+  initial_node_count = 1
 
   # Authentication
   master_authorized_networks_config {

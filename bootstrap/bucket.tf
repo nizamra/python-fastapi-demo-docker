@@ -23,7 +23,7 @@ resource "google_storage_bucket" "terraform_state" {
   labels = {
     environment = "bootstrap"
     managed_by  = "terraform"
-    project     = "gcp-capstone"
+    project     = "gcp-passline"
   }
 
   depends_on = [google_project_service.required_apis]

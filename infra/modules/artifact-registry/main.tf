@@ -9,7 +9,7 @@ resource "google_artifact_registry_repository" "docker_repo" {
     id     = "delete-old-untagged"
     action = "DELETE"
     condition {
-      tag_state = "UNTAGGED"
+      tag_state  = "UNTAGGED"
       older_than = "7d"
     }
   }
